@@ -76,11 +76,17 @@ def _get(url: str, cookie: str | None = None, accept: str = "text/html",
         headers["Cookie"] = cookie
     if extra:
         headers.update(extra)
+    # Route through a residential proxy when BOOLI_PROXY is set (Booli 403s datacenter IPs
+    # like Streamlit Cloud). Unset → direct, unchanged.
+    proxy = os.getenv("BOOLI_PROXY")
+    opener = (urllib.request.build_opener(
+        urllib.request.ProxyHandler({"http": proxy, "https": proxy})) if proxy
+        else urllib.request.build_opener())
     last = None
     for i in range(retries):
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with opener.open(req, timeout=timeout) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
             last = e

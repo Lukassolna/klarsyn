@@ -23,6 +23,7 @@ On any failure we return None (listing) / {} (förening) and the pipeline degrad
 from __future__ import annotations
 import http.cookiejar
 import json
+import os
 import re
 import time
 import urllib.request
@@ -51,7 +52,22 @@ NEXT_RE = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(\{.*?\})</script>', re.D
 # hitting the homepage first so Cloudflare can hand us its clearance cookie before we ask
 # for a listing (a bare listing request from a cold session is what tends to get 403'd).
 _JAR = http.cookiejar.CookieJar()
-_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_JAR))
+
+
+def _build_opener() -> urllib.request.OpenerDirector:
+    """Cookie-carrying opener, optionally routed through a residential proxy.
+
+    Booli/Cloudflare 403s datacenter IPs (e.g. Streamlit Cloud). Set BOOLI_PROXY to a
+    residential proxy URL (http://user:pass@host:port) and all Booli requests exit through
+    it. Unset → direct connection, unchanged behaviour (works from a residential IP)."""
+    handlers = [urllib.request.HTTPCookieProcessor(_JAR)]
+    proxy = os.getenv("BOOLI_PROXY")
+    if proxy:
+        handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+    return urllib.request.build_opener(*handlers)
+
+
+_OPENER = _build_opener()
 _warmed = False
 
 
