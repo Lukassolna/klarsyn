@@ -37,7 +37,8 @@ from report_html import render_html
 # On Streamlit Community Cloud, secrets are set in the app's Secrets UI. Bridge them into
 # os.environ so the Anthropic SDK (ANTHROPIC_API_KEY) and booli_docs (BOOLI_SID) read them
 # exactly like they read a local .env.
-for _k in ("ANTHROPIC_API_KEY", "BOOLI_SID", "KLARSYN_MODEL"):
+for _k in ("ANTHROPIC_API_KEY", "BOOLI_SID", "KLARSYN_MODEL",
+           "KLARSYN_RELAY", "KLARSYN_RELAY_TOKEN"):
     if not os.getenv(_k):
         try:
             if _k in st.secrets:
@@ -45,10 +46,33 @@ for _k in ("ANTHROPIC_API_KEY", "BOOLI_SID", "KLARSYN_MODEL"):
         except Exception:
             pass
 
+# When KLARSYN_RELAY is set, Booli fetches are done by relay.py on a residential machine
+# (Booli 403s Streamlit Cloud's datacenter IP). Unset → fetch Booli directly (local dev).
+RELAY = os.getenv("KLARSYN_RELAY")
+RELAY_TOKEN = os.getenv("KLARSYN_RELAY_TOKEN", "")
+
+
+def _relay_post(path: str, payload: dict, timeout: int = 90) -> dict:
+    import urllib.request
+    req = urllib.request.Request(
+        RELAY.rstrip("/") + path,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Token": RELAY_TOKEN},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
 
 @st.cache_data(show_spinner=False)
 def fetch_booli(url: str):
-    """Listing facts + the förening's Booli-parsed summary/economy (one call, two pages)."""
+    """Listing facts + the förening's Booli-parsed summary/economy (one call, two pages).
+
+    Via the relay when configured, else a direct fetch."""
+    if RELAY:
+        try:
+            return _relay_post("/listing", {"url": url}).get("data")
+        except Exception:
+            return None
     return B.fetch_all(url)
 
 
@@ -61,6 +85,21 @@ def fetch_pdf(url: str, coop_id: int | None):
     missing/expired, or a short diagnostic string on any other failure. The full traceback
     is printed to stderr so it lands in the Streamlit Cloud logs (Manage app → logs)."""
     import traceback
+    if RELAY:
+        try:
+            r = _relay_post("/pdf", {"url": url, "coop_id": coop_id})
+            if r.get("error") == "AUTH":
+                return None, "AUTH"
+            if r.get("error"):
+                return None, r["error"]
+            import base64
+            DATA.mkdir(exist_ok=True)
+            out = DATA / f"relay_{coop_id or 'x'}.pdf"
+            out.write_bytes(base64.b64decode(r["pdf_b64"]))
+            return str(out), None
+        except Exception as e:
+            print(f"[fetch_pdf] relay FAILED: {traceback.format_exc()}", file=sys.stderr, flush=True)
+            return None, f"relay: {type(e).__name__}: {e}"
     try:
         return str(BD.fetch_annual_report(url, coop_id=coop_id)), None
     except BD.BooliAuthError:
