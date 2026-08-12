@@ -3,20 +3,22 @@
 #
 # HOW IT WORKS
 #   Streamlit Cloud can't reach Booli (datacenter IP blocked) or your PC directly (no fixed
-#   public IP). This starts a small relay that fetches Booli locally + a public tunnel the
-#   cloud app calls. No account, no signup.
+#   public IP). This starts a small relay that fetches Booli locally + a Cloudflare tunnel
+#   the cloud app calls. Cloudflare's tunnel is stable (unlike localhost.run).
 #
-# PREREQ - in .env on this machine:
-#   BOOLI_SID=r%3A...your sid...
-#   KLARSYN_RELAY_TOKEN=klarsyn-relay-x7q2m9
+# PREREQ on this machine:
+#   - cloudflared.exe in this folder (already downloaded)
+#   - .env contains:
+#       BOOLI_SID=r%3A...your sid...
+#       KLARSYN_RELAY_TOKEN=klarsyn-relay-x7q2m9
 #
 # USE: right-click -> Run with PowerShell (or: powershell -ExecutionPolicy Bypass -File run_relay.ps1)
-#   It prints a https://xxxx.lhr.life URL. Put that in the app's KLARSYN_RELAY secret.
+#   It prints a https://xxxx.trycloudflare.com URL. Put that in the app's KLARSYN_RELAY secret.
 #   Keep this window open = site live. Close it = fetching stops.
 #
-# NOTE: with no account the URL CHANGES each time you start this. If it dies, restart it and
-#   update KLARSYN_RELAY with the new URL. (Tired of that? Use a residential proxy instead -
-#   see RELAY_RUNBOOK.md, BOOLI_PROXY section: about 7 USD, no PC, no tunnel.)
+# NOTE: the URL changes each time you restart this. While it runs it stays up reliably;
+#   if you restart, update KLARSYN_RELAY with the new url. (Want a fixed url / PC-off / no
+#   window at all? Use a residential proxy instead - see RELAY_RUNBOOK.md, BOOLI_PROXY.)
 
 $ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
@@ -26,11 +28,10 @@ Start-Process -WindowStyle Minimized python -ArgumentList "relay.py"
 Start-Sleep -Seconds 3
 
 Write-Host ""
-Write-Host "Opening public tunnel. COPY the https://...lhr.life URL below into the" -ForegroundColor Cyan
+Write-Host "Opening Cloudflare tunnel. COPY the https://...trycloudflare.com URL below into the" -ForegroundColor Cyan
 Write-Host "KLARSYN_RELAY secret in your Streamlit app. Keep this window open." -ForegroundColor Cyan
 Write-Host ""
-ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes -R 80:localhost:8899 nokey@localhost.run
+& .\cloudflared.exe tunnel --url http://localhost:8899 --no-autoupdate
 
 Write-Host ""
-Write-Host "Tunnel closed. The site is now down. Re-run this script to bring it back." -ForegroundColor Yellow
-Write-Host "You will get a NEW url - update KLARSYN_RELAY with it." -ForegroundColor Yellow
+Write-Host "Tunnel closed. Site is down. Re-run this script to bring it back (you get a new url)." -ForegroundColor Yellow

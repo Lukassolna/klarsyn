@@ -46,3 +46,4 @@ archive/
 # Local run helper artifacts
 bore.exe
 RELAY_RUNBOOK.md
+cloudflared.exe
