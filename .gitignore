@@ -42,3 +42,6 @@ README.internal.md
 
 # Deprecated Playwright login automation (kept local)
 archive/
+
+# Local run helper artifacts
+bore.exe
