@@ -165,7 +165,7 @@ tick();
 </div>
 """
 
-ANCHOR_URL = "https://www.booli.se/bostad/466517"
+ANCHOR_URL = "https://www.booli.se/bostad/466574"
 HAS_KEY = bool(os.getenv("ANTHROPIC_API_KEY"))
 HAS_SID = bool(os.getenv("BOOLI_SID"))
 
