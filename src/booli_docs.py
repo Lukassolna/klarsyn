@@ -62,7 +62,16 @@ def _sid(sid: str | None) -> str:
 
 def _get(url: str, cookie: str | None = None, accept: str = "text/html",
          extra: dict | None = None, timeout: int = 30, retries: int = 3) -> bytes:
-    headers = {"User-Agent": UA, "Accept-Language": "sv-SE,sv;q=0.9", "Accept": accept}
+    headers = {
+        "User-Agent": UA,
+        "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8",
+        "Accept": accept,
+        "Sec-Ch-Ua": '"Chromium";v="120", "Not(A:Brand";v="24"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Origin": "https://www.booli.se",
+        "Referer": "https://www.booli.se/",
+    }
     if cookie:
         headers["Cookie"] = cookie
     if extra:

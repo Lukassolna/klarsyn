@@ -21,18 +21,50 @@ cross-check against hallucinated figures.
 On any failure we return None (listing) / {} (förening) and the pipeline degrades gracefully.
 """
 from __future__ import annotations
+import http.cookiejar
 import json
 import re
 import time
 import urllib.request
 
+# Full browser-like header set. Booli sits behind Cloudflare; a realistic fingerprint plus a
+# warmed cookie session gives us the best shot from a server. (NB: no Accept-Encoding — we
+# don't want gzip we'd have to decompress.)
 HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"),
-    "Accept": "text/html,application/xhtml+xml",
-    "Accept-Language": "sv-SE,sv;q=0.9",
+                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,"
+               "image/apng,*/*;q=0.8"),
+    "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8",
+    "Sec-Ch-Ua": '"Chromium";v="120", "Not(A:Brand";v="24"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 NEXT_RE = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(\{.*?\})</script>', re.DOTALL)
+
+# One cookie-carrying opener reused across requests, like a browser tab. We "warm" it by
+# hitting the homepage first so Cloudflare can hand us its clearance cookie before we ask
+# for a listing (a bare listing request from a cold session is what tends to get 403'd).
+_JAR = http.cookiejar.CookieJar()
+_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_JAR))
+_warmed = False
+
+
+def _warmup() -> None:
+    global _warmed
+    if _warmed:
+        return
+    _warmed = True
+    try:
+        req = urllib.request.Request("https://www.booli.se/", headers=HEADERS)
+        _OPENER.open(req, timeout=20).read()
+    except Exception:
+        pass
 
 
 def _raw(v):
@@ -72,13 +104,15 @@ def _text(v):
     return v
 
 
-def _fetch_html(url: str, retries: int = 3) -> str | None:
+def _fetch_html(url: str, retries: int = 4) -> str | None:
+    _warmup()
+    hdrs = {**HEADERS, "Referer": "https://www.booli.se/", "Sec-Fetch-Site": "same-origin"}
     for i in range(retries):
         try:
-            req = urllib.request.Request(url, headers=HEADERS)
-            return urllib.request.urlopen(req, timeout=25).read().decode("utf-8", "ignore")
+            req = urllib.request.Request(url, headers=hdrs)
+            return _OPENER.open(req, timeout=25).read().decode("utf-8", "ignore")
         except Exception:
-            time.sleep(1.5 * (i + 1))
+            time.sleep(1.5 * (i + 1))  # back off — Booli/Cloudflare throttles rapid repeats
     return None
 
 
