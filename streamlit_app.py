@@ -55,15 +55,20 @@ def fetch_booli(url: str):
 @st.cache_data(show_spinner=False)
 def fetch_pdf(url: str, coop_id: int | None):
     """No-browser fetch of the förening's årsredovisning via booli_docs (plain HTTP + a
-    stored Booli `sid` cookie — no Playwright, no Chrome). Returns the saved PDF path, or
-    None on an ordinary failure; raises BD.BooliAuthError when the session cookie is
-    missing/expired so the UI can tell the user to refresh it."""
+    stored Booli `sid` cookie).
+
+    Returns (path, error): error is None on success, "AUTH" when the session cookie is
+    missing/expired, or a short diagnostic string on any other failure. The full traceback
+    is printed to stderr so it lands in the Streamlit Cloud logs (Manage app → logs)."""
+    import traceback
     try:
-        return str(BD.fetch_annual_report(url, coop_id=coop_id))
+        return str(BD.fetch_annual_report(url, coop_id=coop_id)), None
     except BD.BooliAuthError:
-        raise
-    except Exception:
-        return None
+        return None, "AUTH"
+    except Exception as e:
+        print(f"[fetch_pdf] FAILED url={url} coop_id={coop_id}\n{traceback.format_exc()}",
+              file=sys.stderr, flush=True)
+        return None, f"{type(e).__name__}: {e}"
 
 
 # Client-side "AI working" panel. Pure HTML/CSS/JS so it keeps animating while the
@@ -184,19 +189,10 @@ with st.container(border=True):
     url = st.text_input("Länk till bostaden (Booli)", value=ANCHOR_URL,
                         label_visibility="collapsed", placeholder="https://www.booli.se/bostad/…")
 
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        model_label = st.selectbox("AI-modell", list(M.MODELS.keys()),
-                                    index=list(M.MODELS).index(M.DEFAULT_LABEL))
-        st.caption(M.MODELS[model_label]["hint"])
-    with c2:
-        st.write("")
-        st.write("")
-        run = st.button("Analysera →", use_container_width=True)
+    run = st.button("Analysera →", use_container_width=True)
 
     if not HAS_KEY:
-        st.caption("⚠️ Ingen ANTHROPIC_API_KEY hittad → kör deterministisk fallback "
-                   "(modellvalet ignoreras).")
+        st.caption("⚠️ Analystjänsten är inte tillgänglig just nu — försök igen senare.")
     elif not HAS_SID:
         st.caption("⚠️ Ingen BOOLI_SID satt → kan inte hämta årsredovisningen automatiskt. "
                    "Lägg in `sid`-cookien från en inloggad booli.se-session.")
@@ -206,7 +202,8 @@ with st.container(border=True):
 # ---------------- Report ----------------
 if run or st.session_state.get("shown"):
     st.session_state["shown"] = True
-    model_id = M.id_for(model_label)
+    # Model is fixed and never surfaced to the user (single source of truth in models.py).
+    model_id = M.id_for(M.DEFAULT_LABEL)
 
     if not (url and "booli.se" in url):
         st.error("Klistra in en Booli-länk (t.ex. https://www.booli.se/bostad/…).")
@@ -225,13 +222,12 @@ if run or st.session_state.get("shown"):
     with think.container():
         components.html(THINKING_HTML, height=430)
     coop_id = lo.get("forening_id")  # reuse the id from the listing scrape → avoids a 2nd fetch
-    try:
-        pdf_path = fetch_pdf(url, coop_id)
-        if pdf_path and not Path(pdf_path).exists():
-            # Cached path points at a PDF that a previous run already cleaned up — re-fetch.
-            fetch_pdf.clear()
-            pdf_path = fetch_pdf(url, coop_id)
-    except BD.BooliAuthError:
+    pdf_path, fetch_err = fetch_pdf(url, coop_id)
+    if pdf_path and not Path(pdf_path).exists():
+        # Cached path points at a PDF that a previous run already cleaned up — re-fetch.
+        fetch_pdf.clear()
+        pdf_path, fetch_err = fetch_pdf(url, coop_id)
+    if fetch_err == "AUTH":
         think.empty()
         st.error(
             "Booli-sessionen har gått ut. Logga in på booli.se igen, kopiera `sid`-cookien "
@@ -245,15 +241,21 @@ if run or st.session_state.get("shown"):
             "Kunde inte hämta årsredovisningen. Antingen saknar föreningen en "
             "årsredovisning på Booli, eller så gick hämtningen inte igenom — försök igen."
         )
+        # Temporary debug surface: shows WHY the fetch failed (prod vs local). Remove once
+        # the prod fetch is confirmed working.
+        with st.expander("Teknisk info (debug)"):
+            st.code(
+                f"listing_scrape_ok = {bool(lo)}\n"
+                f"forening_id       = {coop_id}\n"
+                f"url               = {url}\n"
+                f"error             = {fetch_err}"
+            )
         st.stop()
     ri, meta = run_pipeline(model_id, pdf_path, lo, foren)
     html = render_html(ri)
     think.empty()
 
     st.caption(listing_note)
-    badge = (f"🧠 {meta['mode']}" + (f" · {meta['model']}" if meta.get("model") else "")
-             + f" · {meta['elapsed']:.1f}s")
-    st.markdown(f"<span class='run-meta'>{badge}</span>", unsafe_allow_html=True)
     components.html(html, height=3200, scrolling=True)
     st.download_button("⬇︎ Ladda ner rapporten (HTML)", data=html,
                        file_name="klarsyn-rapport.html", mime="text/html")
