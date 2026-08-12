@@ -1,0 +1,44 @@
+# ── Secrets — never commit ─────────────────────────────────────────────
+.env
+.env.*
+*.key
+.streamlit/secrets.toml
+data/booli_cookies.txt
+
+# Booli login session (saved Chrome profile)
+.booli_profile/
+
+# ── Local tooling / editor ─────────────────────────────────────────────
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# ── Generated data & artifacts (never public) ──────────────────────────
+data/
+*.pdf
+*.html
+
+# ── Internal docs — kept LOCAL, not published ──────────────────────────
+# Strategy, research, roadmap, deployment notes, forward-looking plans.
+claude_initial.md
+DAY1_SUMMARY.md
+DEPLOY.md
+NEXT_SESSION.md
+PITCH.md
+progress.md
+ROADMAP.md
+research/
+src/future_agent_plans.py
+README.internal.md
+
+# Deprecated Playwright login automation (kept local)
+archive/

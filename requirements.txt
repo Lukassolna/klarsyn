@@ -1,0 +1,5 @@
+streamlit>=1.30
+anthropic>=0.42
+pdfplumber>=0.11
+pypdf>=4.0
+python-dotenv>=1.0
