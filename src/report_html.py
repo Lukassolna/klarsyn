@@ -602,9 +602,7 @@ ol.q li {{ margin:8px 0; }}
       <div class="lock-title">Lås upp den fullständiga analysen</div>
       <div class="lock-sub">Underhållshistorik, stambyte-status, komponentbesiktning och
         detaljerade nyckeltal i 5 år.</div>
-      <input type="password" id="pw" placeholder="Lösenord (demo: 123456)">
-      <button onclick="klarUnlock()">Lås upp</button>
-      <div id="pwerr" class="pwerr"></div>
+      <button onclick="klarUnlock()">Lås upp den fullständiga analysen</button>
       <div class="lock-note">I skarp version ersätts detta av betalning via Swish.</div>
     </div>
   </div>
@@ -620,18 +618,9 @@ ol.q li {{ margin:8px 0; }}
 </div>
 <script>
 function klarUnlock(){{
-  var v=document.getElementById('pw').value.trim();
-  if(v==='123456'){{
-    document.getElementById('premium-content').classList.remove('locked');
-    document.getElementById('lockgate').style.display='none';
-  }} else {{
-    document.getElementById('pwerr').textContent='Fel lösenord. Prova 123456.';
-  }}
+  document.getElementById('premium-content').classList.remove('locked');
+  document.getElementById('lockgate').style.display='none';
 }}
-document.addEventListener('DOMContentLoaded',function(){{
-  var pw=document.getElementById('pw');
-  if(pw){{pw.addEventListener('keydown',function(e){{if(e.key==='Enter')klarUnlock();}});}}
-}});
 </script>
 </body></html>"""
 
